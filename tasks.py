@@ -1,7 +1,8 @@
 """
-Robot Ordering Automation Script
+Robot Order Automation
 
 https://robotsparebinindustries.com
+
 This Robot automates the process of ordering robots from RobotSpareBin Industries Inc.
 It downloads order data from a CSV file, processes each order, captures screenshots,
 generates PDF receipts with embedded images, and creates a ZIP archive of all receipts.
@@ -14,7 +15,7 @@ from RPA.PDF import PDF
 from RPA.Archive import Archive
 from RPA.Tables import Tables
 from pathlib import Path
-import time
+from tenacity import retry, stop_after_attempt, wait_fixed
 
 # Declaring Constants
 ROBOT_ORDER_URL = "https://robotsparebinindustries.com/#/robot-order"
@@ -92,12 +93,6 @@ def order_robots_from_RobotSpareBin():
     
     The function handles modal dialogs that may appear during the process.
     """
-    # Configure browser with slow motion (100ms delay) and visible mode for debugging
-    # browser.configure(
-    #     slowmo=100,
-    #     headless=False 
-    # )
-    # Ensure output directories exist
     SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
     RECEIPTS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -204,25 +199,31 @@ def screenshot_robot(order):
     screenshot_path = SCREENSHOTS_DIR / f"screenshot_{order_no}.png"
     element.screenshot(path=str(screenshot_path))
 
-def submit_order_with_retry(max_retries=MAX_RETRIES):
+@retry(stop=stop_after_attempt(MAX_RETRIES), wait=wait_fixed(0.3))
+def submit_order_with_retry():
     """
     Submits an order with automatic retry on server errors.
     """
-    page = get_page()
-    
-    for attempt in range(max_retries):
-        page.click("#order")
-        # Wait a moment for server response
-        time.sleep(0.3)
-        if not has_server_error():
-            if attempt > 0:
-                print(f"Order succeeded after {attempt + 1} attempts")
-            return True
-        
-        if attempt < max_retries - 1:
-            print(f"Server error detected, retrying... ({attempt + 1}/{max_retries})")
+    # page = get_page()
+    # for attempt in range(max_retries):
+    #     page.click("#order")
+    #     # Wait a moment for server response
+    #     time.sleep(0.3)
+    #     if not has_server_error():
+    #         if attempt > 0:
+    #             print(f"Order succeeded after {attempt + 1} attempts")
+    #         return True
+    #     if attempt < max_retries - 1:
+    #         print(f"Server error detected, retrying... ({attempt + 1}/{max_retries})")
+    # raise Exception(f"Order failed after {max_retries} retry attempts")
 
-    raise Exception(f"Order failed after {max_retries} retry attempts")
+    page = get_page()
+    page.click("#order")
+    if has_server_error():
+        raise Exception("Server error, retrying...")
+    else:
+        print("Order succeeded!")
+
 
 def has_server_error(timeout=ERROR_TIMEOUT):
     """
